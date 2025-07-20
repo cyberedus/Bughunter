@@ -30,8 +30,13 @@ const ScanDashboard = () => {
     setGpt4Status(prev => ({ ...prev, testing: true }));
     try {
       const response = await axios.post(`${API}/gpt4/test-connection`);
-      setGpt4Status({ connected: response.data.success, testing: false });
+      if (response.data.success) {
+        setGpt4Status({ connected: true, testing: false });
+      } else {
+        setGpt4Status({ connected: false, testing: false });
+      }
     } catch (error) {
+      console.error('GPT-4 connection test failed:', error);
       setGpt4Status({ connected: false, testing: false });
     }
   };
