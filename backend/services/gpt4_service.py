@@ -1,8 +1,9 @@
 import os
 import uuid
 import logging
+import aiohttp
+import json
 from typing import Dict, Any, List, Optional
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,14 @@ class GPT4VulnerabilityAnalyzer:
         # Check if this is an OpenRouter key
         self.is_openrouter = self.api_key.startswith('sk-or-v1-')
         
+        # Set appropriate endpoints
+        if self.is_openrouter:
+            self.api_base = "https://openrouter.ai/api/v1"
+            self.model = "openai/gpt-4"
+        else:
+            self.api_base = "https://api.openai.com/v1"
+            self.model = "gpt-4"
+            
         self.vulnerability_analysis_system_prompt = """
 You are an elite cybersecurity expert and vulnerability researcher with 15+ years of experience in bug bounty hunting, penetration testing, and zero-day discovery. Your expertise includes:
 
@@ -74,28 +83,44 @@ Always provide:
 - Potential detection signatures to avoid
 """
 
-    async def create_chat_session(self, system_message: str) -> LlmChat:
-        """Create a new GPT-4 chat session with optimized configuration."""
-        session_id = f"vuln_scan_{uuid.uuid4().hex[:8]}"
+    async def make_gpt_request(self, messages: List[Dict[str, Any]], session_id: str) -> str:
+        """Make a direct API request to GPT-4 via OpenRouter or OpenAI."""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
         
-        chat = LlmChat(
-            api_key=self.api_key,
-            session_id=session_id,
-            system_message=system_message
-        )
-        
-        # Configure model based on API provider
         if self.is_openrouter:
-            # For OpenRouter, use the model as specified in their format
-            # OpenRouter supports openai/gpt-4 format
-            chat.with_model("openai", "openai/gpt-4")
-        else:
-            # Use GPT-4.1 for direct OpenAI
-            chat.with_model("openai", "gpt-4.1")
-            
-        chat.with_max_tokens(4096)
+            headers["HTTP-Referer"] = "https://vulnscan-enterprise.com"
+            headers["X-Title"] = "VulnScan Enterprise"
         
-        return chat
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": 4096,
+            "temperature": 0.1,  # Low temperature for consistent, accurate results
+            "top_p": 0.9
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.api_base}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=60)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return result["choices"][0]["message"]["content"]
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"GPT-4 API error {response.status}: {error_text}")
+                        raise Exception(f"API request failed with status {response.status}: {error_text}")
+                        
+        except Exception as e:
+            logger.error(f"GPT-4 API request failed: {str(e)}")
+            raise
 
     async def analyze_vulnerability(self, vulnerability_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -112,7 +137,7 @@ Always provide:
             Dictionary containing GPT-4 analysis with confidence scores
         """
         try:
-            chat = await self.create_chat_session(self.vulnerability_analysis_system_prompt)
+            session_id = f"vuln_scan_{uuid.uuid4().hex[:8]}"
             
             analysis_prompt = f"""
 Analyze the following potential vulnerability and provide a comprehensive assessment:
@@ -140,15 +165,20 @@ Please provide:
 Focus on accuracy and avoid false positives. If uncertain, clearly state limitations.
 """
 
-            user_message = UserMessage(text=analysis_prompt)
-            response = await chat.send_message(user_message)
+            messages = [
+                {"role": "system", "content": self.vulnerability_analysis_system_prompt},
+                {"role": "user", "content": analysis_prompt}
+            ]
+            
+            response = await self.make_gpt_request(messages, session_id)
             
             # Parse and structure the response
             return {
                 "gpt4_analysis": response,
-                "session_id": chat.session_id,
-                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
-                "analysis_type": "vulnerability_assessment"
+                "session_id": session_id,
+                "model_used": self.model,
+                "analysis_type": "vulnerability_assessment",
+                "api_provider": "openrouter" if self.is_openrouter else "openai"
             }
             
         except Exception as e:
@@ -166,7 +196,7 @@ Focus on accuracy and avoid false positives. If uncertain, clearly state limitat
             Dictionary containing generated payloads and explanations
         """
         try:
-            chat = await self.create_chat_session(self.payload_generation_system_prompt)
+            session_id = f"payload_gen_{uuid.uuid4().hex[:8]}"
             
             payload_prompt = f"""
 Generate custom exploit payloads for the following confirmed vulnerability:
@@ -186,14 +216,19 @@ Requirements:
 Focus on effectiveness while maintaining ethical testing standards.
 """
 
-            user_message = UserMessage(text=payload_prompt)
-            response = await chat.send_message(user_message)
+            messages = [
+                {"role": "system", "content": self.payload_generation_system_prompt},
+                {"role": "user", "content": payload_prompt}
+            ]
+            
+            response = await self.make_gpt_request(messages, session_id)
             
             return {
                 "generated_payloads": response,
-                "session_id": chat.session_id,
-                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
-                "generation_type": "exploit_payloads"
+                "session_id": session_id,
+                "model_used": self.model,
+                "generation_type": "exploit_payloads",
+                "api_provider": "openrouter" if self.is_openrouter else "openai"
             }
             
         except Exception as e:
@@ -211,7 +246,7 @@ Focus on effectiveness while maintaining ethical testing standards.
             Dictionary containing risk analysis and prioritization
         """
         try:
-            chat = await self.create_chat_session(self.vulnerability_analysis_system_prompt)
+            session_id = f"risk_assess_{uuid.uuid4().hex[:8]}"
             
             # Prepare vulnerability summary
             vuln_summary = []
@@ -240,15 +275,20 @@ Provide:
 Consider real-world exploitation scenarios and business context.
 """
 
-            user_message = UserMessage(text=risk_prompt)
-            response = await chat.send_message(user_message)
+            messages = [
+                {"role": "system", "content": self.vulnerability_analysis_system_prompt},
+                {"role": "user", "content": risk_prompt}
+            ]
+            
+            response = await self.make_gpt_request(messages, session_id)
             
             return {
                 "risk_analysis": response,
-                "session_id": chat.session_id,
-                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
+                "session_id": session_id,
+                "model_used": self.model,
                 "assessment_type": "comprehensive_risk",
-                "vulnerabilities_analyzed": len(scan_results)
+                "vulnerabilities_analyzed": len(scan_results),
+                "api_provider": "openrouter" if self.is_openrouter else "openai"
             }
             
         except Exception as e:
@@ -266,7 +306,7 @@ Consider real-world exploitation scenarios and business context.
             Dictionary with validation results and confidence scores
         """
         try:
-            chat = await self.create_chat_session(self.vulnerability_analysis_system_prompt)
+            session_id = f"fp_filter_{uuid.uuid4().hex[:8]}"
             
             validation_prompt = f"""
 CRITICAL TASK: False Positive Detection
@@ -293,14 +333,19 @@ Provide:
 Remember: False positives waste valuable time for bug hunters and security teams. Be absolutely certain.
 """
 
-            user_message = UserMessage(text=validation_prompt)
-            response = await chat.send_message(user_message)
+            messages = [
+                {"role": "system", "content": self.vulnerability_analysis_system_prompt},
+                {"role": "user", "content": validation_prompt}
+            ]
+            
+            response = await self.make_gpt_request(messages, session_id)
             
             return {
                 "validation_result": response,
-                "session_id": chat.session_id,
-                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
-                "validation_type": "false_positive_filter"
+                "session_id": session_id,
+                "model_used": self.model,
+                "validation_type": "false_positive_filter",
+                "api_provider": "openrouter" if self.is_openrouter else "openai"
             }
             
         except Exception as e:
