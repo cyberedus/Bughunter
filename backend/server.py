@@ -321,18 +321,8 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup_event():
     logger.info("Enterprise Vulnerability Scanner API starting up...")
-    try:
-        # Test GPT-4 connection on startup
-        test_data = {
-            "type": "Test",
-            "details": "Startup connection test",
-            "context": "API initialization",
-            "evidence": "Service startup verification"
-        }
-        await gpt4_service.analyze_vulnerability(test_data)
-        logger.info("GPT-4 connection verified successfully")
-    except Exception as e:
-        logger.error(f"GPT-4 connection test failed at startup: {str(e)}")
+    logger.info(f"GPT-4 service configured with {'OpenRouter' if gpt4_service.is_openrouter else 'OpenAI'} API")
+    logger.info("GPT-4 connection will be tested on first use to conserve API credits")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
