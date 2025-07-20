@@ -97,7 +97,7 @@ Always provide:
         payload = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": 500,  # Reduced for credit limit
+            "max_tokens": 300,  # Reduced further to fit within 388 available tokens
             "temperature": 0.1,  # Low temperature for consistent, accurate results
             "top_p": 0.9
         }
