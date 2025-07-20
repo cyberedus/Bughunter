@@ -119,15 +119,18 @@
 
   - task: "Create GPT-4 service wrapper"
     implemented: true
-    working: true
+    working: false
     file: "backend/services/gpt4_service.py"
-    stuck_count: 0
+    stuck_count: 1
     priority: "high"
     needs_retesting: false
     status_history:
         - working: true
         - agent: "main"
         - comment: "GPT-4 service working with OpenRouter API (openai/gpt-4 model)"
+        - working: false
+        - agent: "testing"
+        - comment: "CRITICAL: GPT-4 integration failing due to insufficient OpenRouter credits (402 error). API key has only 388 tokens available but service requests 500 tokens. Code implementation is correct - this is an external service billing issue. All GPT-4 endpoints (test-connection, analyze-vulnerability, generate-payload) fail with same credit limitation."
 
   - task: "Create vulnerability scanner database models"
     implemented: true
@@ -140,6 +143,33 @@
         - working: true
         - agent: "main"
         - comment: "Comprehensive database models created for scans, vulnerabilities, and GPT analyses"
+        - working: true
+        - agent: "testing"
+        - comment: "Database models working correctly. MongoDB connection tested successfully with read/write operations."
+
+  - task: "Backend API endpoints implementation"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+        - agent: "testing"
+        - comment: "All non-GPT-4 endpoints working correctly: Basic API health (GET /api/), Scan management (create/status/results), Legacy status endpoints, Error handling. 8/11 total tests passed. FastAPI server properly configured with CORS and MongoDB integration."
+
+  - task: "MongoDB database integration"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+        - agent: "testing"
+        - comment: "MongoDB integration fully functional. Connection to localhost:27017 successful, database operations (insert/read/delete) working correctly. Scan jobs and status checks properly stored and retrieved."
 
 ## frontend:
   - task: "Create scanning dashboard interface"
