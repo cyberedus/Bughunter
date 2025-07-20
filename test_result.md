@@ -152,7 +152,19 @@
     status_history:
         - working: "NA"
         - agent: "main"
-        - comment: "Main interface for vulnerability scanning"
+        - comment: "Main interface for vulnerability scanning with modern UI"
+
+  - task: "Create vulnerability results viewer"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/components/VulnerabilityViewer.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+        - agent: "main"
+        - comment: "Component to display vulnerability findings and GPT-4 analysis"
 
 ## metadata:
   created_by: "main_agent"
