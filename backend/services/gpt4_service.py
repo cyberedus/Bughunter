@@ -17,6 +17,9 @@ class GPT4VulnerabilityAnalyzer:
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
         
+        # Check if this is an OpenRouter key
+        self.is_openrouter = self.api_key.startswith('sk-or-v1-')
+        
         self.vulnerability_analysis_system_prompt = """
 You are an elite cybersecurity expert and vulnerability researcher with 15+ years of experience in bug bounty hunting, penetration testing, and zero-day discovery. Your expertise includes:
 
@@ -81,8 +84,15 @@ Always provide:
             system_message=system_message
         )
         
-        # Use GPT-4.1 for maximum accuracy
-        chat.with_model("openai", "gpt-4.1")
+        # Configure model based on API provider
+        if self.is_openrouter:
+            # For OpenRouter, use the model as specified in their format
+            # OpenRouter supports openai/gpt-4 format
+            chat.with_model("openai", "openai/gpt-4")
+        else:
+            # Use GPT-4.1 for direct OpenAI
+            chat.with_model("openai", "gpt-4.1")
+            
         chat.with_max_tokens(4096)
         
         return chat
@@ -137,7 +147,7 @@ Focus on accuracy and avoid false positives. If uncertain, clearly state limitat
             return {
                 "gpt4_analysis": response,
                 "session_id": chat.session_id,
-                "model_used": "gpt-4.1",
+                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
                 "analysis_type": "vulnerability_assessment"
             }
             
@@ -182,7 +192,7 @@ Focus on effectiveness while maintaining ethical testing standards.
             return {
                 "generated_payloads": response,
                 "session_id": chat.session_id,
-                "model_used": "gpt-4.1",
+                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
                 "generation_type": "exploit_payloads"
             }
             
@@ -236,7 +246,7 @@ Consider real-world exploitation scenarios and business context.
             return {
                 "risk_analysis": response,
                 "session_id": chat.session_id,
-                "model_used": "gpt-4.1",
+                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
                 "assessment_type": "comprehensive_risk",
                 "vulnerabilities_analyzed": len(scan_results)
             }
@@ -289,7 +299,7 @@ Remember: False positives waste valuable time for bug hunters and security teams
             return {
                 "validation_result": response,
                 "session_id": chat.session_id,
-                "model_used": "gpt-4.1",
+                "model_used": "openai/gpt-4" if self.is_openrouter else "gpt-4.1",
                 "validation_type": "false_positive_filter"
             }
             
